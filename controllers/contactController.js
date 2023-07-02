@@ -1,9 +1,10 @@
 const { set } = require("../app");
 const Contact = require("../models/Contact");
+const DAO = require("../DAO/contactDAO");
 
 exports.GetAllContacts = async (req, res) => {
   try {
-    const contact = await Contact.find();
+    const contact = await DAO.getContacts();
     res.status(201).json({
       status: "success",
       data: {
@@ -18,31 +19,34 @@ exports.GetAllContacts = async (req, res) => {
 exports.CreateContact = async (req, res) => {
   try {
     const { phone, email } = req.body;
-    const totalContact = await Contact.find();
-    const existingContacts = await Contact.find({
-      $or: [{ email: email }, { phone: phone }],
-    });
+    const totalContact = await DAO.getContacts();
+    const existingContacts = await DAO.getExistingContacts(email, phone);
 
-    let primaryContacts = existingContacts.filter(
-      (contact) => contact.linkPrecedence === "primary"
+    let primaryContacts = DAO.filterContactsByLinkPrecedence(
+      existingContacts,
+      "primary"
     );
-    const secondaryContacts = existingContacts.filter(
-      (contact) => contact.linkPrecedence === "secondary"
+    const secondaryContacts = DAO.filterContactsByLinkPrecedence(
+      existingContacts,
+      "secondary"
     );
-    const phoneMatchedCount = existingContacts.filter(
-      (contact) => contact.phone === phone
-    ).length;
-    const emailMatchedCount = existingContacts.filter(
-      (contact) => contact.email === email
-    ).length;
+    const phoneMatchedCount = DAO.countContactsByProperty(
+      existingContacts,
+      "phone",
+      phone
+    );
+    const emailMatchedCount = DAO.countContactsByProperty(
+      existingContacts,
+      "email",
+      email
+    );
 
+    let globalPrimaryId = null;
     if (
       phoneMatchedCount > 0 &&
       emailMatchedCount > 0 &&
       primaryContacts.length > 0
     ) {
-      //logic
-      //update contact function will be called to update the linked precdence and id
       const lastPrimaryContact = primaryContacts[primaryContacts.length - 1];
       lastPrimaryContact.linkPrecedence = "secondary";
       //for handling the case one primary one secondary or both primary
@@ -50,17 +54,17 @@ exports.CreateContact = async (req, res) => {
         primaryContacts.length > 1
           ? primaryContacts[0].id
           : secondaryContacts[0].linkedId;
-      await lastPrimaryContact.save();
+      globalPrimaryId = lastPrimaryContact.linkedId;
+      await DAO.updateContact(lastPrimaryContact);
     } else if (phoneMatchedCount === 0 && emailMatchedCount === 0) {
       const newContact = new Contact({
         id: totalContact.length + 1,
         phone: phone,
         email: email,
         linkPrecedence: "primary",
-        // Set other properties as needed
       });
-
-      await Contact.create(newContact);
+      globalPrimaryId = newContact.id;
+      await DAO.createContact(newContact);
       primaryContacts.push(newContact);
     } else if (
       (phoneMatchedCount > 0 && emailMatchedCount === 0) ||
@@ -78,32 +82,30 @@ exports.CreateContact = async (req, res) => {
         linkedId,
         linkPrecedence: "secondary",
       });
-
-      await Contact.create(newContact);
+      globalPrimaryId = linkedId;
+      await DAO.createContact(newContact);
     }
 
-    //const newContact = await Contact.create(req.body);
-
-    const updatedSecondaryContacts = await Contact.find({
-      linkedId: primaryContacts[0].id,
-    });
+    const updatedSecondaryContacts = await DAO.getSecondaryContacts(
+      globalPrimaryId
+    );
 
     const [emails, phones, secondaryIds] = [[], [], []];
     updatedSecondaryContacts.map((contact) => {
       emails.push(contact.email);
       phones.push(contact.phone);
-      secondaryIds.push(contact.id);
+      if (contact.id != globalPrimaryId) secondaryIds.push(contact.id);
     });
 
     const response = {
       contacts: {
-        primaryContatctId: primaryContacts[0].id,
+        primaryContatctId: globalPrimaryId,
         emails: [...new Set(emails)],
         phoneNumbers: [...new Set(phones)],
         secondaryContactIds: [...new Set(secondaryIds)],
       },
     };
-    //JSON.stringify(response).replace("/", ""),
+
     res.status(201).json({
       status: "success",
       data: response,
