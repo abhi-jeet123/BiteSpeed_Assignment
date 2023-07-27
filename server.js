@@ -1,15 +1,13 @@
 const app = require("./app");
 const mongoose = require("mongoose");
 
-const url =
-  "mongodb+srv://abhijeettrigunait1234:xnla5RTpdF6gtJLt@cluster0.qsqf5fh.mongodb.net/?retryWrites=true&w=majority";
-
+const url = process.env.CONNECTION_URL;
 const connectConfig = {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 };
 
-const port = 3000;
+const port = process.env.PORT;
 
 mongoose.connect(url, connectConfig).then(() => {
   app.listen(port, () => {
