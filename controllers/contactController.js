@@ -44,17 +44,24 @@ exports.CreateContact = async (req, res) => {
     let globalPrimaryId = null;
     if (
       phoneMatchedCount > 0 &&
-      emailMatchedCount > 0 &&
-      primaryContacts.length > 0
+      emailMatchedCount > 0
+
     ) {
-      const lastPrimaryContact = primaryContacts[primaryContacts.length - 1];
+      const parentPrimaryIds = new Set();
+
+      existingContacts.map((contact) => {
+        if (contact.linkedId != null) parentPrimaryIds.add(contact.linkedId)
+        else parentPrimaryIds.add(contact.id);
+      });
+      const ParentPrimaryContacts = await DAO.getParentPrimaryContacts(parentPrimaryIds);
+
+      const lastPrimaryContact = ParentPrimaryContacts[ParentPrimaryContacts.length - 1];
       lastPrimaryContact.linkPrecedence = "secondary";
       //for handling the case one primary one secondary or both primary
-      lastPrimaryContact.linkedId =
-        primaryContacts.length > 1
-          ? primaryContacts[0].id
-          : secondaryContacts[0].linkedId;
+      lastPrimaryContact.linkedId = ParentPrimaryContacts[0].id
       globalPrimaryId = lastPrimaryContact.linkedId;
+      //update the linked ids of the secondary contact
+      await DAO.updateAllLinkedIds(lastPrimaryContact.id, lastPrimaryContact.linkedId);
       await DAO.updateContact(lastPrimaryContact);
     } else if (phoneMatchedCount === 0 && emailMatchedCount === 0) {
       const newContact = new Contact({
