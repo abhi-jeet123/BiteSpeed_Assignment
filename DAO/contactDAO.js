@@ -1,4 +1,5 @@
 const Contact = require("../models/Contact");
+const mongoose = require("mongoose");
 
 exports.getContacts = () => {
   return Contact.find();
@@ -33,3 +34,25 @@ exports.getExistingContacts = (email, phone) => {
     $or: [{ email: email }, { phone: phone }],
   });
 };
+
+exports.getParentPrimaryContacts = async (ids) => {
+  try {
+    const idsArray = Array.from(ids);
+    const contacts = await Contact.find({ id: { $in: idsArray } }).sort('id').exec();
+
+    console.log('Fetched Records:', contacts);
+    return contacts;
+  } catch (err) {
+    console.error('Error fetching records:', err);
+    return [];
+  }
+};
+
+exports.updateAllLinkedIds = async (toUpdateId, UpdatedId) => {
+  const contacts = await Contact.find({ linkedId: toUpdateId });
+  contacts.forEach(async (cont) => {
+    cont.linkedId = UpdatedId;
+    await this.updateContact(cont);
+  })
+}
+
